@@ -1,6 +1,6 @@
 apply plugin: 'com.android.library'
 apply plugin: 'maven-publish'
-group = 'com.github.safwanidrees'
+group = 'com.github.kaizen-tech-collective'
 
 android {
     compileSdk 33
@@ -49,14 +49,14 @@ afterEvaluate {
                 // Publish the AAR artifact
                 artifact bundleReleaseAar
                 
-                groupId = 'com.github.safwanidrees'
+                groupId = 'com.github.kaizen-tech-collective'
                 artifactId = 'openvpn_library'
-                version = '1.3.6'
+                version = '1.0.1'
                 
                 pom {
                     name = 'OpenVPN Library'
                     description = 'Android OpenVPN library with scheduling capabilities'
-                    url = 'https://github.com/safwanidrees/openvpn_library'
+                    url = 'https://github.com/kaizen-tech-collective/openvpn_library'
                     
                     licenses {
                         license {
@@ -67,8 +67,8 @@ afterEvaluate {
                     
                     developers {
                         developer {
-                            id = 'safwanidrees'
-                            name = 'Safwan Mamji'
+                            id = 'kaizen-tech-collective'
+                            name = 'Kaizen Tech Collective'
                         }
                     }
                 }
