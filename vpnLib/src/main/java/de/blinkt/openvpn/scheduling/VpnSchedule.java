@@ -201,6 +201,15 @@ public class VpnSchedule implements Serializable {
     }
     
     /**
+     * Check if this is an overnight schedule that should start immediately
+     * @return true if connect time is in the past but disconnect time is in the future (overnight schedule)
+     */
+    public boolean isOvernightScheduleInProgress() {
+        long currentTime = System.currentTimeMillis();
+        return connectTimeUTC < currentTime && disconnectTimeUTC > currentTime;
+    }
+    
+    /**
      * Validate schedule parameters for debugging and testing
      * @return Validation result with details
      */

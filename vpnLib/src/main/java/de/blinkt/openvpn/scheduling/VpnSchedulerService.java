@@ -228,6 +228,18 @@ public class VpnSchedulerService extends Service {
                 Log.i(TAG, "Previous day start time detected - both connect and disconnect times are in the past");
                 // For previous day start times, don't schedule disconnect as the window has already passed
                 Log.i(TAG, "Skipping disconnect scheduling - schedule window has already passed");
+                
+                // Clear any existing disconnect alarms to prevent immediate disconnection
+                clearExistingDisconnectAlarms(schedule.getId());
+                return;
+            }
+            
+            // Check if this is an overnight schedule in progress (connect time passed, disconnect time in future)
+            if (schedule.isOvernightScheduleInProgress()) {
+                Log.i(TAG, "Overnight schedule in progress - connect time passed, disconnect time in future");
+                // For overnight schedules in progress, schedule the disconnect for the future time
+                Log.i(TAG, "Scheduling overnight disconnect for future time");
+                scheduleDisconnect(schedule);
                 return;
             }
             
@@ -466,6 +478,11 @@ public class VpnSchedulerService extends Service {
             return true;
         }
         
+        // Check if this is an overnight schedule in progress
+        if (schedule.isOvernightScheduleInProgress()) {
+            return true;
+        }
+        
         // Check if start time is in the past (but not previous day start)
         long timeUntilTrigger = schedule.getConnectTimeUTC() - currentTime;
         if (timeUntilTrigger <= 0) {
@@ -514,6 +531,38 @@ public class VpnSchedulerService extends Service {
         }
         
         Log.w(TAG, "Geofence config load timeout - proceeding with connection attempt");
+    }
+    
+    /**
+     * Clear any existing disconnect alarms to prevent immediate disconnection
+     * @param scheduleId Schedule ID to clear alarms for
+     */
+    private void clearExistingDisconnectAlarms(String scheduleId) {
+        try {
+            Log.i(TAG, "Clearing existing disconnect alarms for schedule: " + scheduleId);
+            
+            // Cancel any pending disconnect alarms for this schedule
+            Intent disconnectIntent = new Intent(this, VpnSchedulerService.class);
+            disconnectIntent.setAction(ACTION_SCHEDULE_DISCONNECT);
+            disconnectIntent.putExtra(EXTRA_SCHEDULE_ID, scheduleId);
+            
+            PendingIntent pendingIntent = PendingIntent.getService(
+                this,
+                getDisconnectRequestCode(scheduleId),
+                disconnectIntent,
+                PendingIntent.FLAG_NO_CREATE
+            );
+            
+            if (pendingIntent != null) {
+                alarmManager.cancel(pendingIntent);
+                pendingIntent.cancel();
+                Log.i(TAG, "Cancelled existing disconnect alarm for schedule: " + scheduleId);
+            } else {
+                Log.i(TAG, "No existing disconnect alarm found for schedule: " + scheduleId);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Error clearing disconnect alarms: " + e.getMessage());
+        }
     }
     
     /**
