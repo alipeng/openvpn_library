@@ -93,17 +93,22 @@ public class VPNHelper extends Activity {
 
 
     public void startVPN(String config, String username, String password, String name, List<String> bypass) {
-        startVPN(config, username, password, name, bypass, 0L, 0L, null, null, null, 0); // Default to immediate
+        startVPN(config, username, password, name, bypass, 0L, 0L, null, null, null, 0, true); // Default to immediate
     }
     
     // Overload for app compatibility - 7 parameters (long, long)
     public String startVPN(String config, String username, String password, String name, List<String> bypassPackages, long startTimeUTC, long endTimeUTC) {
-        return startVPN(config, username, password, name, bypassPackages, startTimeUTC, endTimeUTC, null, null, null, 0);
+        return startVPN(config, username, password, name, bypassPackages, startTimeUTC, endTimeUTC, null, null, null, 0, false);
     }
     
     // Overload for app compatibility - 7 parameters (int, int) 
     public String startVPN(String config, String username, String password, String name, List<String> bypassPackages, int startTimeUTC, int endTimeUTC) {
-        return startVPN(config, username, password, name, bypassPackages, (long)startTimeUTC, (long)endTimeUTC, null, null, null, 0);
+        return startVPN(config, username, password, name, bypassPackages, (long)startTimeUTC, (long)endTimeUTC, null, null, null, 0, false);
+    }
+    
+    // Overload for backward compatibility - without isImmediateConnection flag
+    public String startVPN(String config, String username, String password, String name, List<String> bypassPackages, long startTimeUTC, long endTimeUTC, String notificationTitle, String notificationText, String notificationIcon, int notificationId) {
+        return startVPN(config, username, password, name, bypassPackages, startTimeUTC, endTimeUTC, notificationTitle, notificationText, notificationIcon, notificationId, false);
     }
 
     /**
@@ -115,9 +120,10 @@ public class VPNHelper extends Activity {
      * @param bypassPackages List of package names to bypass VPN
      * @param startTimeUTC Start time in UTC milliseconds (0 for immediate connection)
      * @param endTimeUTC End time in UTC milliseconds (0 for manual disconnect)
+     * @param isImmediateConnection If true, bypass all scheduling logic and connect immediately
      * @return Schedule ID if scheduled, null if immediate
      */
-    public String startVPN(String config, String username, String password, String name, List<String> bypassPackages, long startTimeUTC, long endTimeUTC, String notificationTitle, String notificationText, String notificationIcon, int notificationId) {
+    public String startVPN(String config, String username, String password, String name, List<String> bypassPackages, long startTimeUTC, long endTimeUTC, String notificationTitle, String notificationText, String notificationIcon, int notificationId, boolean isImmediateConnection) {
         
         VPNHelper.config = config;
         VPNHelper.profileIntent = VpnService.prepare(activity);
@@ -148,8 +154,20 @@ public class VPNHelper extends Activity {
             vpnScheduler.configureNotification(notifId, title, text, iconRes); 
         }
         
-        // If no scheduling time provided, use original immediate connection
-        if (startTimeUTC <= 0) { 
+        // Enhanced immediate connection detection
+        boolean shouldConnectImmediately = isImmediateConnection || 
+                                          startTimeUTC <= 0 || 
+                                          (startTimeUTC > 0 && endTimeUTC <= 0); // Missing end time = immediate
+        
+        if (shouldConnectImmediately) { 
+            Log.i("VPNHelper", "Starting immediate VPN connection - bypassing all scheduling logic");
+            
+            // Clear any stale geofence configs for immediate connections
+            if (vpnScheduler != null) {
+                vpnScheduler.clearAllSchedules();
+                Log.i("VPNHelper", "Cleared stale geofence configs for immediate connection");
+            }
+            
             if (profileIntent != null) { 
                 activity.startActivityForResult(VPNHelper.profileIntent, 1);
             } else { 

@@ -145,6 +145,14 @@ public class VpnSchedulerService extends Service {
         } catch (Exception e) {
             Log.w(TAG, "Failed to broadcast scheduled connect event: " + e.getMessage());
         }
+        
+        // Log schedule details for debugging
+        long currentTime = System.currentTimeMillis();
+        Log.i(TAG, "Handling scheduled connect - Current: " + new java.util.Date(currentTime) + 
+              " (" + currentTime + "), Schedule ID: " + scheduleId);
+        
+        // Wait for geofence config to load before making connection decisions
+        waitForGeofenceConfigLoad();
 
         VpnSchedule schedule = getSchedule(scheduleId);
         if (schedule == null) {
@@ -200,9 +208,49 @@ public class VpnSchedulerService extends Service {
             e.printStackTrace();
         }
         
-        // Schedule disconnect if needed
+        // Check if this is an immediate connection - if so, skip all geofence logic
+        if (schedule.isImmediateConnection()) {
+            Log.i(TAG, "Immediate connection detected - skipping all geofence and scheduling logic");
+            return;
+        }
+        
+        // Schedule disconnect if needed - handle overnight schedules and previous day start times correctly
         if (schedule.getDisconnectTimeUTC() > 0) {
-            scheduleDisconnect(schedule);
+            long currentTimeForDisconnect = System.currentTimeMillis();
+            
+            Log.i(TAG, "Schedule details - Connect: " + new java.util.Date(schedule.getConnectTimeUTC()) + 
+                  " (" + schedule.getConnectTimeUTC() + "), Disconnect: " + 
+                  new java.util.Date(schedule.getDisconnectTimeUTC()) + " (" + schedule.getDisconnectTimeUTC() + 
+                  "), Current: " + new java.util.Date(currentTimeForDisconnect) + " (" + currentTimeForDisconnect + ")");
+            
+            // Check if this is a previous day start time scenario
+            if (schedule.isPreviousDayStart()) {
+                Log.i(TAG, "Previous day start time detected - both connect and disconnect times are in the past");
+                // For previous day start times, don't schedule disconnect as the window has already passed
+                Log.i(TAG, "Skipping disconnect scheduling - schedule window has already passed");
+                return;
+            }
+            
+            // For overnight schedules (disconnect time < connect time), only schedule if we're past the connect time
+            if (schedule.getDisconnectTimeUTC() < schedule.getConnectTimeUTC()) {
+                Log.i(TAG, "Overnight schedule detected - disconnect time is before connect time");
+                // Overnight schedule: only schedule disconnect if current time is past the connect time
+                if (currentTimeForDisconnect >= schedule.getConnectTimeUTC()) {
+                    Log.i(TAG, "Scheduling overnight disconnect");
+                    scheduleDisconnect(schedule);
+                } else {
+                    Log.i(TAG, "Not yet time for overnight disconnect - waiting for connect time");
+                }
+            } else {
+                Log.i(TAG, "Same-day schedule detected");
+                // Same-day schedule: only schedule if disconnect time is in the future
+                if (schedule.getDisconnectTimeUTC() > currentTimeForDisconnect) {
+                    Log.i(TAG, "Scheduling same-day disconnect");
+                    scheduleDisconnect(schedule);
+                } else {
+                    Log.i(TAG, "Disconnect time has already passed for same-day schedule");
+                }
+            }
         }
     }
     
@@ -284,14 +332,24 @@ public class VpnSchedulerService extends Service {
         long currentTime = System.currentTimeMillis();
         long timeUntilTrigger = triggerTime - currentTime;
         
-        // Check if start time is in the past
-        if (timeUntilTrigger <= 0) {
+        // Enhanced logic for cross-day scheduling and midnight tomorrow scenarios
+        boolean shouldStartImmediately = shouldStartImmediately(schedule, currentTime);
+        
+        if (shouldStartImmediately) {
             // Start VPN immediately
             handleScheduledConnect(schedule.getId());
             
-            // Only schedule disconnect if end time is in the future
-            if (schedule.getDisconnectTimeUTC() > currentTime) {
-                scheduleDisconnect(schedule);
+            // Handle disconnect scheduling for immediate connections
+            if (schedule.getDisconnectTimeUTC() > 0) {
+                // For overnight schedules (disconnect time < connect time), always schedule disconnect
+                if (schedule.getDisconnectTimeUTC() < schedule.getConnectTimeUTC()) {
+                    scheduleDisconnect(schedule);
+                } else {
+                    // For same-day schedules, only schedule if disconnect time is in the future
+                    if (schedule.getDisconnectTimeUTC() > currentTime) {
+                        scheduleDisconnect(schedule);
+                    }
+                }
             }
             
             return;
@@ -391,6 +449,119 @@ public class VpnSchedulerService extends Service {
     private int getDisconnectRequestCode(String scheduleId) {
         // Use larger offset to ensure no collision with connect codes
         return Math.abs(scheduleId.hashCode()) + 10000;
+    }
+    
+    /**
+     * Enhanced logic to determine if schedule should start immediately
+     * Handles cross-day scheduling and midnight tomorrow scenarios
+     */
+    private boolean shouldStartImmediately(VpnSchedule schedule, long currentTime) {
+        // Check if this is an immediate connection
+        if (schedule.isImmediateConnection()) {
+            return true;
+        }
+        
+        // Check if this is a previous day start time
+        if (schedule.isPreviousDayStart()) {
+            return true;
+        }
+        
+        // Check if start time is in the past (but not previous day start)
+        long timeUntilTrigger = schedule.getConnectTimeUTC() - currentTime;
+        if (timeUntilTrigger <= 0) {
+            // Additional check for cross-day scheduling (midnight tomorrow scenarios)
+            // If startTime is 0 (midnight) and current time is much later, it's likely tomorrow's midnight
+            if (schedule.getConnectTimeUTC() == 0 && currentTime > 0) {
+                // This is likely tomorrow's midnight - don't start immediately
+                Log.i(TAG, "Cross-day schedule detected - startTime is midnight tomorrow, waiting");
+                return false;
+            }
+            return true;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Wait for geofence config to load before making connection decisions
+     * Implements retry logic to prevent race conditions
+     */
+    private void waitForGeofenceConfigLoad() {
+        int maxRetries = 3;
+        int retryDelay = 1000; // 1 second
+        
+        for (int i = 0; i < maxRetries; i++) {
+            try {
+                // Check if geofence config is loaded by checking if we have valid schedule data
+                List<VpnSchedule> schedules = getAllSchedules();
+                if (schedules != null && !schedules.isEmpty()) {
+                    Log.i(TAG, "Geofence config loaded successfully");
+                    return;
+                }
+                
+                if (i < maxRetries - 1) {
+                    Log.i(TAG, "Geofence config not ready, retrying in " + retryDelay + "ms (attempt " + (i + 1) + "/" + maxRetries + ")");
+                    Thread.sleep(retryDelay);
+                }
+            } catch (InterruptedException e) {
+                Log.w(TAG, "Interrupted while waiting for geofence config: " + e.getMessage());
+                Thread.currentThread().interrupt();
+                break;
+            } catch (Exception e) {
+                Log.w(TAG, "Error waiting for geofence config: " + e.getMessage());
+                break;
+            }
+        }
+        
+        Log.w(TAG, "Geofence config load timeout - proceeding with connection attempt");
+    }
+    
+    /**
+     * Comprehensive validation method for testing all scenarios
+     * @param schedule Schedule to validate
+     * @return Detailed validation results
+     */
+    public String validateScheduleComprehensive(VpnSchedule schedule) {
+        if (schedule == null) {
+            return "ERROR: Schedule is null";
+        }
+        
+        StringBuilder result = new StringBuilder();
+        result.append("=== COMPREHENSIVE SCHEDULE VALIDATION ===\n");
+        result.append(schedule.validateSchedule());
+        result.append("\n");
+        
+        long currentTime = System.currentTimeMillis();
+        
+        // Test all scenarios
+        result.append("=== SCENARIO TESTING ===\n");
+        
+        // 1. Immediate Connection Test
+        result.append("1. Immediate Connection: ").append(schedule.isImmediateConnection()).append("\n");
+        
+        // 2. Previous Day Start Test
+        result.append("2. Previous Day Start: ").append(schedule.isPreviousDayStart()).append("\n");
+        
+        // 3. Overnight Schedule Test
+        boolean isOvernight = schedule.getDisconnectTimeUTC() < schedule.getConnectTimeUTC();
+        result.append("3. Overnight Schedule: ").append(isOvernight).append("\n");
+        
+        // 4. Cross-day Schedule Test
+        boolean isCrossDay = schedule.getConnectTimeUTC() == 0 && currentTime > 0;
+        result.append("4. Cross-day Schedule: ").append(isCrossDay).append("\n");
+        
+        // 5. Should Start Immediately Test
+        result.append("5. Should Start Immediately: ").append(shouldStartImmediately(schedule, currentTime)).append("\n");
+        
+        // 6. Should Trigger Test
+        result.append("6. Should Trigger Now: ").append(schedule.shouldTriggerAt(currentTime)).append("\n");
+        
+        // 7. Should Disconnect Test
+        result.append("7. Should Disconnect Now: ").append(schedule.shouldDisconnectAt(currentTime)).append("\n");
+        
+        result.append("=== END VALIDATION ===\n");
+        
+        return result.toString();
     }
 
     private void removeSchedule(String scheduleId) {

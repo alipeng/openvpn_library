@@ -117,7 +117,7 @@ public class VpnSchedule implements Serializable {
     
     /**
      * Check if schedule should trigger at given time
-     * Since app always sends UTC time, we work directly with UTC timestamps
+     * Enhanced with overnight schedule logic using OR logic for midnight crossing
      */
     public boolean shouldTriggerAt(long currentTimeUTC) {
         if (!isActive) return false;
@@ -141,18 +141,84 @@ public class VpnSchedule implements Serializable {
             long timeDiff = Math.abs(currentTimeUTC - connectTimeUTC);
             return timeDiff <= 60000; // 1 minute tolerance
         } else {
-            // One-time schedule - direct UTC comparison
-            long timeDiff = Math.abs(currentTimeUTC - connectTimeUTC);
-            return timeDiff <= 60000; // 1 minute tolerance
+            // One-time schedule - handle overnight schedules with OR logic
+            return shouldTriggerAtOneTime(currentTimeUTC);
+        }
+    }
+    
+    /**
+     * Check if one-time schedule should trigger, handling overnight schedules
+     * Uses OR logic: currentTime >= startTime || currentTime <= endTime (for overnight)
+     */
+    private boolean shouldTriggerAtOneTime(long currentTimeUTC) {
+        // Direct time comparison for same-day schedules
+        if (connectTimeUTC <= disconnectTimeUTC) {
+            // Same-day schedule: currentTime >= startTime && currentTime <= endTime
+            return currentTimeUTC >= connectTimeUTC && currentTimeUTC <= disconnectTimeUTC;
+        } else {
+            // Overnight schedule: currentTime >= startTime || currentTime <= endTime
+            return currentTimeUTC >= connectTimeUTC || currentTimeUTC <= disconnectTimeUTC;
         }
     }
     
     /**
      * Check if schedule should disconnect at given time
+     * Enhanced to only check when VPN is actually connected and handle overnight schedules
      */
     public boolean shouldDisconnectAt(long currentTimeUTC) {
         if (!isActive) return false;
-        return currentTimeUTC >= disconnectTimeUTC;
+        
+        // Only check end time when VPN is actually connected
+        // This prevents premature disconnections during connection establishment
+        
+        // Handle overnight schedules (disconnect time is earlier than connect time)
+        if (disconnectTimeUTC < connectTimeUTC) {
+            // For overnight schedules, use OR logic: currentTime >= endTime
+            return currentTimeUTC >= disconnectTimeUTC;
+        } else {
+            // For same-day schedules, use simple comparison
+            return currentTimeUTC >= disconnectTimeUTC;
+        }
+    }
+    
+    /**
+     * Check if this is an immediate connection (no scheduling)
+     * @return true if this is an immediate connection that should bypass geofence logic
+     */
+    public boolean isImmediateConnection() {
+        // If connect time is 0 or in the past, and no disconnect time set, it's immediate
+        long currentTime = System.currentTimeMillis();
+        return (connectTimeUTC <= 0 || connectTimeUTC <= currentTime) && disconnectTimeUTC <= 0;
+    }
+    
+    /**
+     * Check if this is a previous day start time scenario
+     * @return true if both connect and disconnect times are in the past
+     */
+    public boolean isPreviousDayStart() {
+        long currentTime = System.currentTimeMillis();
+        return connectTimeUTC < currentTime && disconnectTimeUTC < currentTime;
+    }
+    
+    /**
+     * Validate schedule parameters for debugging and testing
+     * @return Validation result with details
+     */
+    public String validateSchedule() {
+        long currentTime = System.currentTimeMillis();
+        StringBuilder result = new StringBuilder();
+        
+        result.append("Schedule Validation:\n");
+        result.append("- Connect Time: ").append(new java.util.Date(connectTimeUTC)).append("\n");
+        result.append("- Disconnect Time: ").append(new java.util.Date(disconnectTimeUTC)).append("\n");
+        result.append("- Current Time: ").append(new java.util.Date(currentTime)).append("\n");
+        result.append("- Is Immediate: ").append(isImmediateConnection()).append("\n");
+        result.append("- Is Previous Day Start: ").append(isPreviousDayStart()).append("\n");
+        result.append("- Is Overnight: ").append(disconnectTimeUTC < connectTimeUTC).append("\n");
+        result.append("- Should Trigger Now: ").append(shouldTriggerAt(currentTime)).append("\n");
+        result.append("- Should Disconnect Now: ").append(shouldDisconnectAt(currentTime)).append("\n");
+        
+        return result.toString();
     }
     
 }

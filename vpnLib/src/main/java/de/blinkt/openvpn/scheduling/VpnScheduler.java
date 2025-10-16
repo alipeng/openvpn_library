@@ -150,6 +150,37 @@ public class VpnScheduler {
         return getAllSchedulesInternal();
     }
     
+    /**
+     * Clear all scheduled VPNs (for immediate connections)
+     */
+    public void clearAllSchedules() {
+        Log.i(TAG, "Clearing all scheduled VPNs for immediate connection");
+        android.content.SharedPreferences prefs = context.getSharedPreferences("vpn_schedules", android.content.Context.MODE_PRIVATE);
+        prefs.edit().putString("schedules", "[]").apply();
+        
+        // Cancel all alarms
+        android.app.AlarmManager alarmManager = (android.app.AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+        if (alarmManager != null) {
+            // Cancel all pending intents for this app
+            android.content.Intent connectIntent = new android.content.Intent(context, VpnSchedulerService.class);
+            android.content.Intent disconnectIntent = new android.content.Intent(context, VpnSchedulerService.class);
+            
+            android.app.PendingIntent connectPendingIntent = android.app.PendingIntent.getService(
+                context, 0, connectIntent, android.app.PendingIntent.FLAG_NO_CREATE);
+            android.app.PendingIntent disconnectPendingIntent = android.app.PendingIntent.getService(
+                context, 0, disconnectIntent, android.app.PendingIntent.FLAG_NO_CREATE);
+                
+            if (connectPendingIntent != null) {
+                alarmManager.cancel(connectPendingIntent);
+                connectPendingIntent.cancel();
+            }
+            if (disconnectPendingIntent != null) {
+                alarmManager.cancel(disconnectPendingIntent);
+                disconnectPendingIntent.cancel();
+            }
+        }
+    }
+    
     private void startSchedulerService() {
         Intent serviceIntent = new Intent(context, VpnSchedulerService.class);
         context.startService(serviceIntent);
