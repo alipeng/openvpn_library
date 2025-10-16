@@ -181,8 +181,23 @@ public class VPNHelper extends Activity {
               " (" + startTimeUTC + "), Disconnect: " + new java.util.Date(endTimeUTC) + 
               " (" + endTimeUTC + "), Current: " + new java.util.Date(System.currentTimeMillis()));
         
-        // Schedule VPN
-        String scheduleId = scheduleVpn(config, name, username, password, startTimeUTC, endTimeUTC, bypassPackages);
+        // Check if this is an overnight schedule where end time is before start time
+        // This happens when app sends midnight (00:00) as end time for overnight schedules
+        long correctedEndTimeUTC = endTimeUTC;
+        if (endTimeUTC > 0 && endTimeUTC < startTimeUTC) {
+            // This is likely an overnight schedule where end time (midnight) is before start time
+            // Move end time to next day
+            java.util.Calendar endTime = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+            endTime.setTimeInMillis(endTimeUTC);
+            endTime.add(java.util.Calendar.DAY_OF_MONTH, 1);
+            correctedEndTimeUTC = endTime.getTimeInMillis();
+            
+            Log.i("VPNHelper", "Overnight schedule detected - end time moved to next day: " + 
+                  new java.util.Date(correctedEndTimeUTC) + " (" + correctedEndTimeUTC + ")");
+        }
+        
+        // Schedule VPN with corrected end time
+        String scheduleId = scheduleVpn(config, name, username, password, startTimeUTC, correctedEndTimeUTC, bypassPackages);
         return scheduleId;
     }
 
