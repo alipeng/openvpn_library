@@ -164,8 +164,12 @@ public class VPNHelper extends Activity {
             
             // Clear any stale geofence configs for immediate connections
             if (vpnScheduler != null) {
-                vpnScheduler.clearAllSchedules();
-                Log.i("VPNHelper", "Cleared stale geofence configs for immediate connection");
+                try {
+                    vpnScheduler.clearAllSchedules();
+                    Log.i("VPNHelper", "Cleared stale geofence configs for immediate connection");
+                } catch (Exception e) {
+                    Log.w("VPNHelper", "clearAllSchedules failed during immediate connection: " + e.getMessage());
+                }
             }
             
             if (profileIntent != null) { 
@@ -173,7 +177,7 @@ public class VPNHelper extends Activity {
             } else { 
                 startVPN();
             }
-            return null; // Immediate connection
+            return "immediate_connection"; // Return non-null token to avoid platform null errors
         }
         
         // Debug logging for UTC timestamps
