@@ -252,6 +252,13 @@ public class VpnSchedulerService extends Service {
                 return;
             }
             
+            // Check if we're within geofence hours like iOS
+            if (schedule.isWithinGeofenceHours()) {
+                Log.i(TAG, "Within geofence hours - scheduling disconnect");
+                scheduleDisconnect(schedule);
+                return;
+            }
+            
             // For overnight schedules (disconnect time < connect time), only schedule if we're past the connect time
             if (schedule.getDisconnectTimeUTC() < schedule.getConnectTimeUTC()) {
                 Log.i(TAG, "Overnight schedule detected - disconnect time is before connect time");
@@ -492,6 +499,16 @@ public class VpnSchedulerService extends Service {
             return true;
         }
         
+        // Check if we're within geofence hours like iOS
+        if (schedule.isWithinGeofenceHours()) {
+            return true;
+        }
+        
+        // Check if it's start time like iOS
+        if (schedule.isStartTime()) {
+            return true;
+        }
+        
         // Check if start time is in the past (but not previous day start)
         long timeUntilTrigger = schedule.getConnectTimeUTC() - currentTime;
         if (timeUntilTrigger <= 0) {
@@ -505,6 +522,8 @@ public class VpnSchedulerService extends Service {
             return true;
         }
         
+        // For future schedules, don't start immediately
+        Log.i(TAG, "Future schedule detected - start time is in the future, waiting for scheduled time");
         return false;
     }
     

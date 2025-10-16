@@ -226,21 +226,22 @@ public class VPNHelper extends Activity {
             return null;
         }
         
-        // App sends UTC times directly - no timezone conversion needed
-        // Create UTC calendars for today's date with the specified hours
-        java.util.Calendar connectTime = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+        // Handle hour/minute parameters like iOS - convert to UTC timestamps
+        // Force UTC timezone for consistent comparison (like iOS)
+        java.util.TimeZone utcTimeZone = java.util.TimeZone.getTimeZone("UTC");
+        java.util.Calendar connectTime = java.util.Calendar.getInstance(utcTimeZone);
         connectTime.set(java.util.Calendar.HOUR_OF_DAY, connectHour);
         connectTime.set(java.util.Calendar.MINUTE, connectMinute);
         connectTime.set(java.util.Calendar.SECOND, 0);
         connectTime.set(java.util.Calendar.MILLISECOND, 0);
         
-        java.util.Calendar disconnectTime = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+        java.util.Calendar disconnectTime = java.util.Calendar.getInstance(utcTimeZone);
         disconnectTime.set(java.util.Calendar.HOUR_OF_DAY, disconnectHour);
         disconnectTime.set(java.util.Calendar.MINUTE, disconnectMinute);
         disconnectTime.set(java.util.Calendar.SECOND, 0);
         disconnectTime.set(java.util.Calendar.MILLISECOND, 0);
         
-        // Handle overnight schedules: if disconnect time is before or equal to connect time, it's next day
+        // Handle overnight schedules like iOS: if disconnect time is before or equal to connect time, it's next day
         if (disconnectTime.getTimeInMillis() <= connectTime.getTimeInMillis()) {
             // For overnight schedules (e.g., 5:00 AM to midnight), disconnect is next day
             disconnectTime.add(java.util.Calendar.DAY_OF_MONTH, 1);

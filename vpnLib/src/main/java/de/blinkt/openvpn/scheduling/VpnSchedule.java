@@ -147,22 +147,41 @@ public class VpnSchedule implements Serializable {
     }
     
     /**
-     * Check if one-time schedule should trigger, handling overnight schedules
+     * Check if one-time schedule should trigger, handling overnight schedules like iOS
      * Uses OR logic: currentTime >= startTime || currentTime <= endTime (for overnight)
      */
     private boolean shouldTriggerAtOneTime(long currentTimeUTC) {
-        // Direct time comparison for same-day schedules
-        if (connectTimeUTC <= disconnectTimeUTC) {
-            // Same-day schedule: currentTime >= startTime && currentTime <= endTime
-            return currentTimeUTC >= connectTimeUTC && currentTimeUTC <= disconnectTimeUTC;
+        // Convert to minutes for easier comparison (like iOS)
+        java.util.Calendar current = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+        current.setTimeInMillis(currentTimeUTC);
+        int currentHour = current.get(java.util.Calendar.HOUR_OF_DAY);
+        int currentMinute = current.get(java.util.Calendar.MINUTE);
+        int currentTimeMinutes = currentHour * 60 + currentMinute;
+        
+        java.util.Calendar connect = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+        connect.setTimeInMillis(connectTimeUTC);
+        int connectHour = connect.get(java.util.Calendar.HOUR_OF_DAY);
+        int connectMinute = connect.get(java.util.Calendar.MINUTE);
+        int startTimeMinutes = connectHour * 60 + connectMinute;
+        
+        java.util.Calendar disconnect = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+        disconnect.setTimeInMillis(disconnectTimeUTC);
+        int disconnectHour = disconnect.get(java.util.Calendar.HOUR_OF_DAY);
+        int disconnectMinute = disconnect.get(java.util.Calendar.MINUTE);
+        int endTimeMinutes = disconnectHour * 60 + disconnectMinute;
+        
+        // Handle overnight schedules like iOS
+        if (startTimeMinutes < endTimeMinutes) {
+            // Same day schedule: [start, end]
+            return currentTimeMinutes >= startTimeMinutes && currentTimeMinutes <= endTimeMinutes;
         } else {
-            // Overnight schedule: currentTime >= startTime || currentTime <= endTime
-            return currentTimeUTC >= connectTimeUTC || currentTimeUTC <= disconnectTimeUTC;
+            // Overnight schedule: [start, 1440) ∪ [0, end]
+            return currentTimeMinutes >= startTimeMinutes || currentTimeMinutes <= endTimeMinutes;
         }
     }
     
     /**
-     * Check if schedule should disconnect at given time
+     * Check if schedule should disconnect at given time like iOS
      * Enhanced to only check when VPN is actually connected and handle overnight schedules
      */
     public boolean shouldDisconnectAt(long currentTimeUTC) {
@@ -171,13 +190,32 @@ public class VpnSchedule implements Serializable {
         // Only check end time when VPN is actually connected
         // This prevents premature disconnections during connection establishment
         
-        // Handle overnight schedules (disconnect time is earlier than connect time)
-        if (disconnectTimeUTC < connectTimeUTC) {
-            // For overnight schedules, use OR logic: currentTime >= endTime
-            return currentTimeUTC >= disconnectTimeUTC;
+        // Convert to minutes for easier comparison (like iOS)
+        java.util.Calendar current = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+        current.setTimeInMillis(currentTimeUTC);
+        int currentHour = current.get(java.util.Calendar.HOUR_OF_DAY);
+        int currentMinute = current.get(java.util.Calendar.MINUTE);
+        int currentTimeMinutes = currentHour * 60 + currentMinute;
+        
+        java.util.Calendar connect = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+        connect.setTimeInMillis(connectTimeUTC);
+        int connectHour = connect.get(java.util.Calendar.HOUR_OF_DAY);
+        int connectMinute = connect.get(java.util.Calendar.MINUTE);
+        int startTimeMinutes = connectHour * 60 + connectMinute;
+        
+        java.util.Calendar disconnect = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+        disconnect.setTimeInMillis(disconnectTimeUTC);
+        int disconnectHour = disconnect.get(java.util.Calendar.HOUR_OF_DAY);
+        int disconnectMinute = disconnect.get(java.util.Calendar.MINUTE);
+        int endTimeMinutes = disconnectHour * 60 + disconnectMinute;
+        
+        // Handle overnight schedules like iOS
+        if (startTimeMinutes < endTimeMinutes) {
+            // Same day schedule: end time is exclusive
+            return currentTimeMinutes >= endTimeMinutes;
         } else {
-            // For same-day schedules, use simple comparison
-            return currentTimeUTC >= disconnectTimeUTC;
+            // Overnight schedule: end time is the first minute outside the window
+            return currentTimeMinutes >= endTimeMinutes && currentTimeMinutes < startTimeMinutes;
         }
     }
     
@@ -207,6 +245,99 @@ public class VpnSchedule implements Serializable {
     public boolean isOvernightScheduleInProgress() {
         long currentTime = System.currentTimeMillis();
         return connectTimeUTC < currentTime && disconnectTimeUTC > currentTime;
+    }
+    
+    /**
+     * Check if we're within geofence hours like iOS
+     * @return true if current time is within the schedule window
+     */
+    public boolean isWithinGeofenceHours() {
+        long currentTime = System.currentTimeMillis();
+        
+        // Convert to minutes for easier comparison (like iOS)
+        java.util.Calendar current = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+        current.setTimeInMillis(currentTime);
+        int currentHour = current.get(java.util.Calendar.HOUR_OF_DAY);
+        int currentMinute = current.get(java.util.Calendar.MINUTE);
+        int currentTimeMinutes = currentHour * 60 + currentMinute;
+        
+        java.util.Calendar connect = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+        connect.setTimeInMillis(connectTimeUTC);
+        int connectHour = connect.get(java.util.Calendar.HOUR_OF_DAY);
+        int connectMinute = connect.get(java.util.Calendar.MINUTE);
+        int startTimeMinutes = connectHour * 60 + connectMinute;
+        
+        java.util.Calendar disconnect = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+        disconnect.setTimeInMillis(disconnectTimeUTC);
+        int disconnectHour = disconnect.get(java.util.Calendar.HOUR_OF_DAY);
+        int disconnectMinute = disconnect.get(java.util.Calendar.MINUTE);
+        int endTimeMinutes = disconnectHour * 60 + disconnectMinute;
+        
+        // Handle overnight schedules like iOS
+        if (startTimeMinutes < endTimeMinutes) {
+            // Same day schedule: [start, end]
+            return currentTimeMinutes >= startTimeMinutes && currentTimeMinutes <= endTimeMinutes;
+        } else {
+            // Overnight schedule: [start, 1440) ∪ [0, end]
+            return currentTimeMinutes >= startTimeMinutes || currentTimeMinutes <= endTimeMinutes;
+        }
+    }
+    
+    /**
+     * Check if it's start time like iOS
+     * @return true if current time matches the start time
+     */
+    public boolean isStartTime() {
+        long currentTime = System.currentTimeMillis();
+        
+        // Convert to minutes for easier comparison (like iOS)
+        java.util.Calendar current = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+        current.setTimeInMillis(currentTime);
+        int currentHour = current.get(java.util.Calendar.HOUR_OF_DAY);
+        int currentMinute = current.get(java.util.Calendar.MINUTE);
+        
+        java.util.Calendar connect = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+        connect.setTimeInMillis(connectTimeUTC);
+        int connectHour = connect.get(java.util.Calendar.HOUR_OF_DAY);
+        int connectMinute = connect.get(java.util.Calendar.MINUTE);
+        
+        return currentHour == connectHour && currentMinute == connectMinute;
+    }
+    
+    /**
+     * Check if it's end time like iOS
+     * @return true if current time matches the end time
+     */
+    public boolean isEndTime() {
+        long currentTime = System.currentTimeMillis();
+        
+        // Convert to minutes for easier comparison (like iOS)
+        java.util.Calendar current = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+        current.setTimeInMillis(currentTime);
+        int currentHour = current.get(java.util.Calendar.HOUR_OF_DAY);
+        int currentMinute = current.get(java.util.Calendar.MINUTE);
+        int currentTimeMinutes = currentHour * 60 + currentMinute;
+        
+        java.util.Calendar connect = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+        connect.setTimeInMillis(connectTimeUTC);
+        int connectHour = connect.get(java.util.Calendar.HOUR_OF_DAY);
+        int connectMinute = connect.get(java.util.Calendar.MINUTE);
+        int startTimeMinutes = connectHour * 60 + connectMinute;
+        
+        java.util.Calendar disconnect = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+        disconnect.setTimeInMillis(disconnectTimeUTC);
+        int disconnectHour = disconnect.get(java.util.Calendar.HOUR_OF_DAY);
+        int disconnectMinute = disconnect.get(java.util.Calendar.MINUTE);
+        int endTimeMinutes = disconnectHour * 60 + disconnectMinute;
+        
+        // Handle overnight schedules like iOS
+        if (startTimeMinutes < endTimeMinutes) {
+            // Same day schedule: end time is exclusive
+            return currentTimeMinutes >= endTimeMinutes;
+        } else {
+            // Overnight schedule: end time is the first minute outside the window
+            return currentTimeMinutes >= endTimeMinutes && currentTimeMinutes < startTimeMinutes;
+        }
     }
     
     /**
