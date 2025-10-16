@@ -176,6 +176,11 @@ public class VPNHelper extends Activity {
             return null; // Immediate connection
         }
         
+        // Debug logging for UTC timestamps
+        Log.i("VPNHelper", "UTC Timestamps - Connect: " + new java.util.Date(startTimeUTC) + 
+              " (" + startTimeUTC + "), Disconnect: " + new java.util.Date(endTimeUTC) + 
+              " (" + endTimeUTC + "), Current: " + new java.util.Date(System.currentTimeMillis()));
+        
         // Schedule VPN
         String scheduleId = scheduleVpn(config, name, username, password, startTimeUTC, endTimeUTC, bypassPackages);
         return scheduleId;
@@ -206,8 +211,8 @@ public class VPNHelper extends Activity {
             return null;
         }
         
-        // Calculate UTC times for today - use UTC timezone since app sends UTC times
-        java.util.Calendar today = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+        // App sends UTC times directly - no timezone conversion needed
+        // Create UTC calendars for today's date with the specified hours
         java.util.Calendar connectTime = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
         connectTime.set(java.util.Calendar.HOUR_OF_DAY, connectHour);
         connectTime.set(java.util.Calendar.MINUTE, connectMinute);
@@ -220,11 +225,12 @@ public class VPNHelper extends Activity {
         disconnectTime.set(java.util.Calendar.SECOND, 0);
         disconnectTime.set(java.util.Calendar.MILLISECOND, 0);
         
-         
-        // If disconnect time is before connect time, assume next day
+        // Handle overnight schedules: if disconnect time is before or equal to connect time, it's next day
         if (disconnectTime.getTimeInMillis() <= connectTime.getTimeInMillis()) {
-             disconnectTime.add(java.util.Calendar.DAY_OF_MONTH, 1);
-         }
+            // For overnight schedules (e.g., 5:00 AM to midnight), disconnect is next day
+            disconnectTime.add(java.util.Calendar.DAY_OF_MONTH, 1);
+            Log.i("VPNHelper", "Overnight schedule detected - disconnect time moved to next day");
+        }
         
         // Debug logging for timezone conversion
         Log.i("VPNHelper", "UTC Time Conversion - Connect: " + new java.util.Date(connectTime.getTimeInMillis()) + 

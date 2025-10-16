@@ -223,6 +223,15 @@ public class VpnSchedulerService extends Service {
                   new java.util.Date(schedule.getDisconnectTimeUTC()) + " (" + schedule.getDisconnectTimeUTC() + 
                   "), Current: " + new java.util.Date(currentTimeForDisconnect) + " (" + currentTimeForDisconnect + ")");
             
+            // Debug: Check if this is an overnight schedule in progress
+            if (schedule.isOvernightScheduleInProgress()) {
+                Log.i(TAG, "DEBUG: Overnight schedule in progress detected");
+            } else if (schedule.isPreviousDayStart()) {
+                Log.i(TAG, "DEBUG: Previous day start detected");
+            } else {
+                Log.i(TAG, "DEBUG: Regular schedule detected");
+            }
+            
             // Check if this is a previous day start time scenario
             if (schedule.isPreviousDayStart()) {
                 Log.i(TAG, "Previous day start time detected - both connect and disconnect times are in the past");
