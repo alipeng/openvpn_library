@@ -181,6 +181,73 @@ public class VpnScheduler {
         }
     }
     
+    /**
+     * Check if there's an active schedule running (between start and end time)
+     * This helps the app avoid starting VPN again when a schedule is already in progress
+     * @return true if there's an active schedule, false otherwise
+     */
+    public boolean hasActiveSchedule() {
+        try {
+            android.content.SharedPreferences prefs = context.getSharedPreferences("vpn_schedules", android.content.Context.MODE_PRIVATE);
+            String json = prefs.getString("schedules", "[]");
+            
+            com.google.gson.Gson gson = new com.google.gson.Gson();
+            java.lang.reflect.Type listType = new com.google.gson.reflect.TypeToken<java.util.List<VpnSchedule>>(){}.getType();
+            java.util.List<VpnSchedule> schedules = gson.fromJson(json, listType);
+            
+            if (schedules == null || schedules.isEmpty()) {
+                return false;
+            }
+            
+            long currentTime = System.currentTimeMillis();
+            
+            for (VpnSchedule schedule : schedules) {
+                if (schedule.isActive() && schedule.isWithinGeofenceHours()) {
+                    Log.i(TAG, "Active schedule found: " + schedule.getName() + 
+                          " (Connect: " + new java.util.Date(schedule.getConnectTimeUTC()) + 
+                          ", Disconnect: " + new java.util.Date(schedule.getDisconnectTimeUTC()) + 
+                          ", Current: " + new java.util.Date(currentTime) + ")");
+                    return true;
+                }
+            }
+            
+            return false;
+        } catch (Exception e) {
+            Log.e(TAG, "Error checking active schedules: " + e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Get details of active schedule (if any)
+     * @return VpnSchedule object if there's an active schedule, null otherwise
+     */
+    public VpnSchedule getActiveSchedule() {
+        try {
+            android.content.SharedPreferences prefs = context.getSharedPreferences("vpn_schedules", android.content.Context.MODE_PRIVATE);
+            String json = prefs.getString("schedules", "[]");
+            
+            com.google.gson.Gson gson = new com.google.gson.Gson();
+            java.lang.reflect.Type listType = new com.google.gson.reflect.TypeToken<java.util.List<VpnSchedule>>(){}.getType();
+            java.util.List<VpnSchedule> schedules = gson.fromJson(json, listType);
+            
+            if (schedules == null || schedules.isEmpty()) {
+                return null;
+            }
+            
+            for (VpnSchedule schedule : schedules) {
+                if (schedule.isActive() && schedule.isWithinGeofenceHours()) {
+                    return schedule;
+                }
+            }
+            
+            return null;
+        } catch (Exception e) {
+            Log.e(TAG, "Error getting active schedule: " + e.getMessage());
+            return null;
+        }
+    }
+    
     private void startSchedulerService() {
         Intent serviceIntent = new Intent(context, VpnSchedulerService.class);
         context.startService(serviceIntent);

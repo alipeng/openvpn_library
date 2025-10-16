@@ -96,6 +96,29 @@ public class VPNHelper extends Activity {
         startVPN(config, username, password, name, bypass, 0L, 0L, null, null, null, 0, true); // Default to immediate
     }
     
+    /**
+     * Check if there's an active schedule running (between start and end time)
+     * This helps the app avoid starting VPN again when a schedule is already in progress
+     * @return true if there's an active schedule, false otherwise
+     */
+    public boolean hasActiveSchedule() {
+        if (vpnScheduler == null) {
+            return false;
+        }
+        return vpnScheduler.hasActiveSchedule();
+    }
+    
+    /**
+     * Get details of active schedule (if any)
+     * @return VpnSchedule object if there's an active schedule, null otherwise
+     */
+    public VpnSchedule getActiveSchedule() {
+        if (vpnScheduler == null) {
+            return null;
+        }
+        return vpnScheduler.getActiveSchedule();
+    }
+    
     // Overload for app compatibility - 7 parameters (long, long)
     public String startVPN(String config, String username, String password, String name, List<String> bypassPackages, long startTimeUTC, long endTimeUTC) {
         return startVPN(config, username, password, name, bypassPackages, startTimeUTC, endTimeUTC, null, null, null, 0, false);
