@@ -206,15 +206,15 @@ public class VPNHelper extends Activity {
             return null;
         }
         
-        // Calculate UTC times for today
-        java.util.Calendar today = java.util.Calendar.getInstance();
-        java.util.Calendar connectTime = java.util.Calendar.getInstance();
+        // Calculate UTC times for today - use UTC timezone since app sends UTC times
+        java.util.Calendar today = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
+        java.util.Calendar connectTime = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
         connectTime.set(java.util.Calendar.HOUR_OF_DAY, connectHour);
         connectTime.set(java.util.Calendar.MINUTE, connectMinute);
         connectTime.set(java.util.Calendar.SECOND, 0);
         connectTime.set(java.util.Calendar.MILLISECOND, 0);
         
-        java.util.Calendar disconnectTime = java.util.Calendar.getInstance();
+        java.util.Calendar disconnectTime = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"));
         disconnectTime.set(java.util.Calendar.HOUR_OF_DAY, disconnectHour);
         disconnectTime.set(java.util.Calendar.MINUTE, disconnectMinute);
         disconnectTime.set(java.util.Calendar.SECOND, 0);
@@ -225,6 +225,11 @@ public class VPNHelper extends Activity {
         if (disconnectTime.getTimeInMillis() <= connectTime.getTimeInMillis()) {
              disconnectTime.add(java.util.Calendar.DAY_OF_MONTH, 1);
          }
+        
+        // Debug logging for timezone conversion
+        Log.i("VPNHelper", "UTC Time Conversion - Connect: " + new java.util.Date(connectTime.getTimeInMillis()) + 
+              " (" + connectTime.getTimeInMillis() + "), Disconnect: " + 
+              new java.util.Date(disconnectTime.getTimeInMillis()) + " (" + disconnectTime.getTimeInMillis() + ")");
         
         // Schedule VPN for today
         String scheduleId = scheduleVpn(config, name, username, password, 
