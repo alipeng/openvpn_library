@@ -7,7 +7,15 @@ group = 'com.github.alipeng'
 
 android {
     namespace 'de.blinkt.openvpn'
+
     compileSdkVersion 36
+
+    sourceSets {
+        main {
+            aidl.srcDirs += 'src/main/aidl'
+        }
+    }
+
     defaultConfig {
         minSdkVersion 24
         targetSdkVersion 36
