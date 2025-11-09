@@ -3,6 +3,7 @@ apply plugin: 'maven-publish'
 group = 'com.github.alipeng'
 
 android {
+    namespace 'de.blinkt.openvpn'
     compileSdkVersion 36
     defaultConfig {
         minSdkVersion 24
